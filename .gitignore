@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Variables de entorno
+.env
+
+# Go
+scanner/bin/
+
+# VS Code
+.vscode/
+
+# Docker
+*.log
