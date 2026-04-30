@@ -1,0 +1,32 @@
+services:
+  db: # Base de datos
+    image: postgres:16 # Imagen oficial de PostgreSQL
+    environment: # Variables de entorno para configurar PostgreSQL
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432" # Puerto de PC - Puerto del contenedor
+    volumes:
+      - postgres_data:/var/lib/postgresql/data # Esto es un 'volume' para persistir datos, la ruta es interna de PostgreSQL en el contenedor
+
+  api: # API de FastAPI (Python)
+    build: ./api # No es imagen oficial, se construye a partir del Dockerfile en ./api
+    ports:
+      - "8000:8000"
+    environment: # Variables de entorno para configurar la conexión a la base de datos
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB} 
+    depends_on:
+      - db # Esto significa que la API no intentar conectarse a la BDD hasta que el servicio de la base de datos esté listo
+    volumes:
+    # Esto dice basicamente:
+    # "Todo lo que está en mi carpeta api/ de Windows, hacelo visible en /app dentro del contenedor"
+      - ./api:/app # Esto es un 'bind mount' para que los cambios en el código de la API se reflejen inmediatamente en el contenedor (útil para desarrollo)
+
+  scanner: # Escaner de vulnerabilidades (Go)
+    build: ./scanner # No es imagen oficial, se construye a partir del Dockerfile en ./scanner
+    depends_on:
+      - db # Esto significa que el escaner no intentará conectarse a la BDD hasta que el servicio de la base de datos esté listo
+
+volumes:
+  postgres_data: # Le digo a Docker que maneje este volumen
