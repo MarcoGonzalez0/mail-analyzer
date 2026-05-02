@@ -22,6 +22,8 @@ services:
     # Esto dice basicamente:
     # "Todo lo que está en mi carpeta api/ de Windows, hacelo visible en /app dentro del contenedor"
       - ./api:/app # Esto es un 'bind mount' para que los cambios en el código de la API se reflejen inmediatamente en el contenedor (útil para desarrollo)
+      # esto sobreescribe lo que COPY . . puso en el Dockerfile, pero es útil para desarrollo porque permite que los cambios en el código se reflejen inmediatamente sin tener que reconstruir la imagen cada vez
+      # En producción no hay bind mount, entonces COPY . . es lo que manda y el código queda fijo dentro de la imagen.
 
   scanner: # Escaner de vulnerabilidades (Go)
     build: ./scanner # No es imagen oficial, se construye a partir del Dockerfile en ./scanner
@@ -30,3 +32,18 @@ services:
 
 volumes:
   postgres_data: # Le digo a Docker que maneje este volumen
+
+
+# COMENTARIOS PARA CLARIDAD
+
+# Cada contenedor tiene su propio /app aislado. No comparten el mismo /app:
+# Un container no sabe lo que hay en el otro, no pueden acceder a los archivos del otro. Esto es parte de la magia de Docker, cada contenedor es como una mini máquina virtual con su propio sistema de archivos, procesos, etc.
+
+# Contenedor API          Contenedor Scanner
+# ──────────────          ──────────────────
+# /app/                   /app/
+# ├── app/                └── bin/
+# │   ├── main.py             scanner (binario)
+# │   └── ...
+# ├── tests/
+# └── requirements.txt
