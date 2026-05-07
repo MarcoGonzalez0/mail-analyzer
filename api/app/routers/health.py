@@ -1,9 +1,20 @@
-from fastapi import APIRouter # Importamos APIRouter para crear un router específico para las rutas de salud
+from fastapi import APIRouter, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
+from app.database import get_db
 
 router = APIRouter()
 
-@router.get("/health") # evita usar verbos en la ruta, el verbo ya está dado por el método HTTP (GET)
-async def health_check():
-    return {"status": "ok",
-            "db": "connected",
-            "version": "1.0.0"}
+@router.get("/health")
+async def health_check(db: AsyncSession = Depends(get_db)):
+    try:
+        await db.execute(text("SELECT 1"))
+        db_status = "ok"
+    except Exception:
+        db_status = "error"
+
+    return {
+        "status": "ok" if db_status == "ok" else "degraded",
+        "version": "1.0.0",
+        "db": db_status
+    }

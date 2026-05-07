@@ -9,15 +9,21 @@ services:
       - "5432:5432" # Puerto de PC - Puerto del contenedor
     volumes:
       - postgres_data:/var/lib/postgresql/data # Esto es un 'volume' para persistir datos, la ruta es interna de PostgreSQL en el contenedor
+    healthcheck: # Esto es para que Docker pueda verificar si la base de datos está lista para aceptar conexiones
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   api: # API de FastAPI (Python)
     build: ./api # No es imagen oficial, se construye a partir del Dockerfile en ./api
     ports:
       - "8000:8000"
     environment: # Variables de entorno para configurar la conexión a la base de datos
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB} 
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB} 
     depends_on:
-      - db # Esto significa que la API no intentar conectarse a la BDD hasta que el servicio de la base de datos esté listo
+      db: # Esto significa que la API no intentar conectarse a la BDD hasta que el servicio de la base de datos esté listo
+        condition: service_healthy # Esto hace que la API espere a que el healthcheck de la base de datos indique que está lista antes de iniciar
     volumes:
     # Esto dice basicamente:
     # "Todo lo que está en mi carpeta api/ de Windows, hacelo visible en /app dentro del contenedor"
@@ -28,7 +34,8 @@ services:
   scanner: # Escaner de vulnerabilidades (Go)
     build: ./scanner # No es imagen oficial, se construye a partir del Dockerfile en ./scanner
     depends_on:
-      - db # Esto significa que el escaner no intentará conectarse a la BDD hasta que el servicio de la base de datos esté listo
+      db: # Esto significa que el escaner no intentará conectarse a la BDD hasta que el servicio de la base de datos esté listo
+        condition: service_healthy # Esto hace que el escaner espere a que el healthcheck de la base de datos indique que está lista antes de iniciar
 
 volumes:
   postgres_data: # Le digo a Docker que maneje este volumen
