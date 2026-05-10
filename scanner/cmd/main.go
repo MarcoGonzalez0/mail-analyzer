@@ -16,12 +16,14 @@ type ScanRequest struct { // Espero recibir
 	Domain string `json:"domain"`
 }
 
+// El dns.Result viene de dns.go, allá está definida la estructura
 type ScanResponse struct { // Respondo con
 	Domain  string     `json:"domain"` 
 	DNS     dns.Result `json:"dns"`
 }
 
 func scanHandler(w http.ResponseWriter, r *http.Request) {
+	// w es el ResponseWriter que se utiliza para enviar la respuesta al cliente, y r es el Request que contiene la información de la solicitud entrante.
 
 	// Verificar que el método HTTP sea POST, si no lo es, se devuelve un error de "método no permitido".
 	if r.Method != http.MethodPost {
