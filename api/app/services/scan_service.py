@@ -6,6 +6,11 @@
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+
+from app.services.spf import analyze_spf
+from app.services.dmarc import analyze_dmarc
+from app.services.whois import analyze_whois
+
 from app.models.scan import Scan
 from app.schemas import ScanRequest
 from datetime import datetime, timezone
@@ -16,11 +21,16 @@ import httpx
 SCANNER_URL = "http://scanner:8080/scan"
 
 RULES = [
-    {"id": "no_spf",     "penalty": 20, "description": "No SPF record found"},
-    {"id": "weak_spf",   "penalty": 10, "description": "SPF uses +all"},
-    {"id": "no_dmarc",   "penalty": 20, "description": "No DMARC record found"},
-    {"id": "dmarc_none", "penalty": 10, "description": "DMARC policy is none"},
-    {"id": "no_mx",      "penalty": 15, "description": "No MX records found"},
+    {"id": "no_spf",              "penalty": 20, "description": "No SPF record found"},
+    {"id": "weak_spf",            "penalty": 25, "description": "SPF uses +all, anyone can send"},
+    {"id": "soft_spf",            "penalty": 10, "description": "SPF uses ~all, weak policy"},
+    {"id": "neutral_spf",         "penalty": 15, "description": "SPF uses ?all, no policy"},
+    {"id": "no_dmarc",            "penalty": 20, "description": "No DMARC record found"},
+    {"id": "dmarc_none",          "penalty": 15, "description": "DMARC policy is none, no action taken"},
+    {"id": "dmarc_quarantine",    "penalty": 5,  "description": "DMARC policy is quarantine, not fully strict"},
+    {"id": "dmarc_partial",       "penalty": 5,  "description": "DMARC not applied to all emails"},
+    {"id": "no_mx",               "penalty": 15, "description": "No MX records found"},
+    {"id": "domain_expiring_soon","penalty": 10, "description": "Domain expires in less than 30 days"},
 ]
 
 def calculate_risk_score(findings: list[str]) -> int:
@@ -30,15 +40,31 @@ def calculate_risk_score(findings: list[str]) -> int:
 def extract_domain(email: str) -> str:
     return email.split("@")[1]
 
-def analyze_findings(dns_result: dict) -> list[str]:
+def analyze_findings(dns_result: dict) -> tuple[list[str], dict]:
+    # En esta funcion se utilizan los modulos Python para analizar los resultados de GO y luego se agregan a la estructura de response
     findings = []
-    if not dns_result.get("has_spf"):
+    analysis = {}
+
+    # SPF
+    txt_records = dns_result.get("txt_records") or []
+    spf_analysis = analyze_spf(txt_records)
+    analysis["spf"] = spf_analysis
+    findings.extend(spf_analysis["findings"])
+
+    if not spf_analysis["found"]:
         findings.append("no_spf")
-    if not dns_result.get("has_dmarc"):
-        findings.append("no_dmarc")
+
+    # DMARC
+    dmarc_records = dns_result.get("dmarc_records") or []
+    dmarc_analysis = analyze_dmarc(dns_result.get("domain", ""), dmarc_records)
+    analysis["dmarc"] = dmarc_analysis
+    findings.extend(dmarc_analysis["findings"])
+
+    # MX
     if not dns_result.get("has_mx"):
         findings.append("no_mx")
-    return findings
+
+    return findings, analysis
 
 # Esta función se encarga de llamar al escaner de GO, enviándole el dominio a analizar.
 async def call_scanner(domain: str) -> dict:
@@ -61,14 +87,30 @@ async def create_scan(db: AsyncSession, payload: ScanRequest) -> Scan:
     await db.refresh(scan)
 
     try:
-        scanner_result = await call_scanner(domain)
-        dns_result = scanner_result.get("dns", {})
-        findings = analyze_findings(dns_result)
-        risk_score = calculate_risk_score(findings)
+        
+        """
+        Scanner GO
+        """
+        scanner_result = await call_scanner(domain) # LLamo al scanner de GO
+        dns_result = scanner_result.get("dns", {}) # Obtengo los resultados DNS del escaneo
+        findings, analysis = analyze_findings(dns_result) # Analizo los resultados con Python (SPF, DMARC, MX)
 
+        """
+        WHOIS
+        """
+        whois_analysis = analyze_whois(domain)
+        analysis["whois"] = whois_analysis
+        findings.extend(whois_analysis["findings"])
+        
+
+        risk_score = calculate_risk_score(findings) # Calculo el riesgo total basado en las reglas definidas
+
+
+        # Actualizo el escaneo con los resultados y análisis obtenidos
         scan.status = "completed"
-        scan.results = scanner_result
+        scan.results = {**scanner_result, "analysis": analysis}
         scan.findings = findings
+        scan.analysis = analysis
         scan.risk_score = risk_score
         scan.completed_at = datetime.now(timezone.utc)
 

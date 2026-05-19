@@ -35,6 +35,9 @@ services:
     build: ./scanner # No es imagen oficial, se construye a partir del Dockerfile en ./scanner
     ports:
       - "8080:8080"
+    dns:
+      - 8.8.8.8 
+      - 1.1.1.1
     depends_on:
       db: # Esto significa que el escaner no intentará conectarse a la BDD hasta que el servicio de la base de datos esté listo
         condition: service_healthy # Esto hace que el escaner espere a que el healthcheck de la base de datos indique que está lista antes de iniciar
