@@ -1,5 +1,7 @@
+
 import whois
 from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 
 def analyze_whois(domain: str) -> dict:
     """
@@ -8,7 +10,15 @@ def analyze_whois(domain: str) -> dict:
     try:
         w = whois.whois(domain)
 
-        if not w or not w.domain_name:
+        has_data = any([ # Verificar si se obtuvo información relevante
+            getattr(w, "domain_name", None),
+            getattr(w, "registrar", None),
+            getattr(w, "creation_date", None),
+            getattr(w, "expiration_date", None),
+            getattr(w, "name_servers", None),
+        ])
+
+        if not has_data: # Si no se encontró información relevante, consideramos que no se encontró el dominio
             return {
                 "found": False,
                 "findings": ["whois_not_found"],
@@ -53,6 +63,28 @@ def _parse_date(date) -> datetime | None:
         if date.tzinfo is None:
             return date.replace(tzinfo=timezone.utc)
         return date
+    
+    if isinstance(date, str):
+        try:
+            parsed = parsedate_to_datetime(date)
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            return parsed
+        except Exception:
+            pass
+
+        # fallback manual
+        try:
+            return datetime.strptime(
+                date.replace(" CLST", ""),
+                "%Y-%m-%d %H:%M:%S"
+            ).replace(tzinfo=timezone.utc)
+        except Exception:
+            return None
+
+
+
+
     return None
 
 def _parse_nameservers(ns) -> list[str]:

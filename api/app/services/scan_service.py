@@ -51,8 +51,8 @@ def analyze_findings(dns_result: dict) -> tuple[list[str], dict]:
     analysis["spf"] = spf_analysis
     findings.extend(spf_analysis["findings"])
 
-    if not spf_analysis["found"]:
-        findings.append("no_spf")
+    #if not spf_analysis["found"]: # sale 2 veces no spf
+    #    findings.append("no_spf")
 
     # DMARC
     dmarc_records = dns_result.get("dmarc_records") or []
