@@ -16,6 +16,11 @@ from app.schemas import ScanRequest
 from datetime import datetime, timezone
 import httpx
 
+from app.logging_config import get_logger # Importamos el logger para usarlo en esta capa de servicios
+import time
+
+logger = get_logger()
+
 # El scanner de GO está corriendo en el contenedor "scanner" y expone su API en el puerto 8080.
 # /scan es la ruta que el escaner espera para recibir las solicitudes de escaneo.
 SCANNER_URL = "http://scanner:8080/scan"
@@ -76,6 +81,8 @@ async def call_scanner(domain: str) -> dict:
 # La función create_scan es la función principal que se llama para crear un nuevo escaneo.
 async def create_scan(db: AsyncSession, payload: ScanRequest) -> Scan:
     domain = extract_domain(payload.email)
+    logger.info("=============================================================")
+    logger.info(f"Creando nuevo escaneo para {payload.email} (dominio: {domain})") # Logueamos la creación del escaneo con el email y dominio
 
     scan = Scan(
         email=payload.email,

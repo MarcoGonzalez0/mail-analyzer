@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from app.routers import scans, health
 from app.database import engine, Base
+from app.logging_config import setup_logging
+from app.config import settings
 
 app = FastAPI(
     title="Mail Analyzer",
@@ -14,8 +16,10 @@ app = FastAPI(
 # engine    → para operaciones de estructura (CREATE TABLE)
 @app.on_event("startup")
 async def startup():
-    async with engine.begin() as conn:
+    setup_logging(environment=settings.environment)  # Configura el logging al iniciar la aplicación
+    async with engine.begin() as conn:# Conexión asíncrona a la base de datos
         await conn.run_sync(Base.metadata.create_all)
 
+# Incluimos los routers para las rutas de escaneo y salud
 app.include_router(scans.router, prefix="/v1")
 app.include_router(health.router, prefix="/v1")

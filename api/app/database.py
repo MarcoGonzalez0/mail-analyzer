@@ -3,7 +3,8 @@ from sqlalchemy.orm import DeclarativeBase, sessionmaker # para crear sesiones y
 from app.config import settings # buscar URL de la database
 
 # Crear el motor de la base de datos asíncrona utilizando la URL proporcionada en la configuración
-engine = create_async_engine(settings.database_url, echo=True)
+engine = create_async_engine(settings.database_url, 
+                             echo=settings.environment == "development")
 
 # Crear una clase de sesión asíncrona utilizando sessionmaker, que se utilizará para interactuar con la base de datos
 AsyncSessionLocal = sessionmaker(

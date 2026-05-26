@@ -2,6 +2,8 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     database_url: str # espera encontrar DATABASE_URL en el entorno
+    environment: str = "development" # puede ser "development" o "production", por defecto es "development"
+
 
     class Config: # Clase de configuración para pydantic, que especifica que las variables de entorno se cargarán desde un archivo .env
         env_file = ".env" # busca las variables en este archivo
