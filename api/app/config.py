@@ -4,6 +4,10 @@ class Settings(BaseSettings):
     database_url: str # espera encontrar DATABASE_URL en el entorno
     environment: str = "development" # puede ser "development" o "production", por defecto es "development"
 
+    # El scanner de GO está corriendo en el contenedor "scanner" y expone su API en el puerto 8080.
+    # /scan es la ruta que el escaner espera para recibir las solicitudes de escaneo.
+    scanner_url: str = "http://scanner:8080/scan"
+
 
     class Config: # Clase de configuración para pydantic, que especifica que las variables de entorno se cargarán desde un archivo .env
         env_file = ".env" # busca las variables en este archivo

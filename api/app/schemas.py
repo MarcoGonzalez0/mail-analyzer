@@ -9,7 +9,7 @@ import uuid
 # Valida lo que llega desde el cliente en el POST /v1/scans
 class ScanRequest(BaseModel):
     email: EmailStr
-    headers: Optional[list[str]] = []
+    headers: list[str] = []
 
 # Valida y define la estructura de la respuesta. 
 # From_attributes=True le dice a Pydantic que puede construir este schema desde un objeto SQLAlchemy directamente
@@ -18,7 +18,7 @@ class ScanResponse(BaseModel):
     email: str
     domain: str
     status: str
-    risk_score: Optional[int] = None
+    risk_score: Optional[int] = None # O es un int o None
     results: Optional[dict] = None
     findings: Optional[list[str]] = None
     created_at: datetime

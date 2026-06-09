@@ -82,9 +82,6 @@ def _parse_date(date) -> datetime | None:
         except Exception:
             return None
 
-
-
-
     return None
 
 def _parse_nameservers(ns) -> list[str]:

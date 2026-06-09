@@ -4,8 +4,11 @@
 # de datos utilizando SQLAlchemy y aplican las reglas de evaluación para calcular el 
 # riesgo del correo electrónico analizado.
 
+from typing import TypedDict
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from app.config import settings
 
 from app.services.spf import analyze_spf
 from app.services.dmarc import analyze_dmarc
@@ -17,15 +20,24 @@ from datetime import datetime, timezone
 import httpx
 
 from app.logging_config import get_logger # Importamos el logger para usarlo en esta capa de servicios
-import time
 
 logger = get_logger()
 
-# El scanner de GO está corriendo en el contenedor "scanner" y expone su API en el puerto 8080.
-# /scan es la ruta que el escaner espera para recibir las solicitudes de escaneo.
-SCANNER_URL = "http://scanner:8080/scan"
+# Contrato de retorno de _run_analysis: define exactamente qué llaves y tipos devuelve.
+# Usar TypedDict en lugar de dict genérico permite autocompletado y detección de errores en el editor.
+class AnalysisResult(TypedDict):
+    results:    dict        # datos crudos del scanner Go + análisis Python ensamblados
+    findings:   list[str]  # lista de IDs de reglas violadas (ej: "no_spf", "dmarc_none")
+    risk_score: int         # puntuación final 0–100
 
-RULES = [
+# Cada regla tiene un ID que identifica el problema, una penalización al score y una descripción legible.
+# Tipar la lista como list[Rule] permite que el editor detecte typos en las claves ("penality" vs "penalty").
+class Rule(TypedDict):
+    id:          str  # identificador único de la regla, coincide con los findings
+    penalty:     int  # puntos que se restan del score (0–100) cuando la regla se viola
+    description: str  # descripción legible del problema para logs y respuestas
+
+RULES: list[Rule] = [
     {"id": "no_spf",              "penalty": 20, "description": "No SPF record found"},
     {"id": "weak_spf",            "penalty": 25, "description": "SPF uses +all, anyone can send"},
     {"id": "soft_spf",            "penalty": 10, "description": "SPF uses ~all, weak policy"},
@@ -45,36 +57,47 @@ def calculate_risk_score(findings: list[str]) -> int:
 def extract_domain(email: str) -> str:
     return email.split("@")[1]
 
-def analyze_findings(dns_result: dict) -> tuple[list[str], dict]:
-    # En esta funcion se utilizan los modulos Python para analizar los resultados de GO y luego se agregan a la estructura de response
-    findings = []
-    analysis = {}
+async def _run_analysis(domain: str) -> AnalysisResult:
+    """
+    Orquesta el análisis completo de un dominio:
+    llama al scanner Go (DNS), corre los analizadores Python (SPF, DMARC, MX, WHOIS)
+    y ensambla el resultado listo para guardar en DB.
+    """
+    scanner_result = await call_scanner(domain)
+    dns_result = scanner_result.get("dns", {})
 
-    # SPF
-    txt_records = dns_result.get("txt_records") or []
-    spf_analysis = analyze_spf(txt_records)
+    findings: list[str] = []
+    analysis: dict = {}
+
+    # SPF — ¿puede cualquiera enviar email fingiendo ser este dominio?
+    spf_analysis = analyze_spf(dns_result.get("txt_records") or [])
     analysis["spf"] = spf_analysis
     findings.extend(spf_analysis["findings"])
 
-    #if not spf_analysis["found"]: # sale 2 veces no spf
-    #    findings.append("no_spf")
-
-    # DMARC
-    dmarc_records = dns_result.get("dmarc_records") or []
-    dmarc_analysis = analyze_dmarc(dns_result.get("domain", ""), dmarc_records)
+    # DMARC — ¿qué hace el servidor receptor con emails que fallan SPF/DKIM?
+    dmarc_analysis = analyze_dmarc(domain, dns_result.get("dmarc_records") or [])
     analysis["dmarc"] = dmarc_analysis
     findings.extend(dmarc_analysis["findings"])
 
-    # MX
+    # MX — sin registros MX el dominio no está configurado para recibir correo
     if not dns_result.get("has_mx"):
         findings.append("no_mx")
 
-    return findings, analysis
+    # WHOIS — información de registro: quién es el dueño y cuándo expira
+    whois_analysis = analyze_whois(domain)
+    analysis["whois"] = whois_analysis
+    findings.extend(whois_analysis["findings"])
+
+    return AnalysisResult(
+        results={**scanner_result, "analysis": analysis},  # datos crudos Go + análisis Python
+        findings=findings,
+        risk_score=calculate_risk_score(findings),
+    )
 
 # Esta función se encarga de llamar al escaner de GO, enviándole el dominio a analizar.
 async def call_scanner(domain: str) -> dict:
     async with httpx.AsyncClient(timeout=10.0) as client:
-        response = await client.post(SCANNER_URL, json={"domain": domain})
+        response = await client.post(settings.scanner_url, json={"domain": domain})
         response.raise_for_status()
         return response.json()
 
@@ -94,36 +117,18 @@ async def create_scan(db: AsyncSession, payload: ScanRequest) -> Scan:
     await db.refresh(scan)
 
     try:
-        
-        """
-        Scanner GO
-        """
-        scanner_result = await call_scanner(domain) # LLamo al scanner de GO
-        dns_result = scanner_result.get("dns", {}) # Obtengo los resultados DNS del escaneo
-        findings, analysis = analyze_findings(dns_result) # Analizo los resultados con Python (SPF, DMARC, MX)
-
-        """
-        WHOIS
-        """
-        whois_analysis = analyze_whois(domain)
-        analysis["whois"] = whois_analysis
-        findings.extend(whois_analysis["findings"])
-        
-
-        risk_score = calculate_risk_score(findings) # Calculo el riesgo total basado en las reglas definidas
-
+        outcome = await _run_analysis(domain)
 
         # Actualizo el escaneo con los resultados y análisis obtenidos
-        scan.status = "completed"
-        scan.results = {**scanner_result, "analysis": analysis}
-        scan.findings = findings
-        scan.analysis = analysis
-        scan.risk_score = risk_score
+        scan.status      = "completed"
+        scan.results     = outcome["results"]
+        scan.findings    = outcome["findings"]
+        scan.risk_score  = outcome["risk_score"]
         scan.completed_at = datetime.now(timezone.utc)
 
     except Exception as e:
         scan.status = "failed"
-        scan.findings = [str(e)]
+        logger.error(f"Error al analizar {payload.email}: {str(e)}") # Logueamos el error con el email que causó el problema
 
     await db.commit()
     await db.refresh(scan)
