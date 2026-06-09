@@ -35,16 +35,27 @@ def analyze_whois(domain: str) -> dict:
             if days_until_expiry < 30:
                 findings.append("domain_expiring_soon")
 
+        updated_date = _parse_date(getattr(w, "updated_date", None))
+
         return {
             "found": True,
-            "registrar": w.registrar,
-            "creation_date": creation_date.isoformat() if creation_date else None,
+            # quién registró el dominio y desde dónde
+            "registrar":    getattr(w, "registrar", None),
+            "registrant":   getattr(w, "registrant", None),  # nombre del registrante (no siempre disponible)
+            "org":          getattr(w, "org", None),          # organización registrante
+            "country":      getattr(w, "country", None),      # país de registro — útil para detectar dominios que fingen ser locales
+            # fechas
+            "creation_date":  creation_date.isoformat() if creation_date else None,
+            "updated_date":   updated_date.isoformat() if updated_date else None,   # modificación reciente puede indicar domain hijacking
             "expiration_date": expiration_date.isoformat() if expiration_date else None,
             "days_until_expiry": days_until_expiry,
+            # contacto y resolución
+            "emails":       _parse_list(getattr(w, "emails", None)),       # email anónimo/desechable es señal de alerta
             "name_servers": _parse_nameservers(w.name_servers),
-            "status": _parse_status(w.status),
+            "status":       _parse_status(w.status),
+            # análisis de seguridad
             "findings": findings,
-            "details": _describe(days_until_expiry)
+            "details":  _describe(days_until_expiry)
         }
 
     except Exception as e:
@@ -83,6 +94,14 @@ def _parse_date(date) -> datetime | None:
             return None
 
     return None
+
+def _parse_list(val) -> list[str]:
+    """Convierte cualquier valor (str, lista, None) a lista de strings."""
+    if val is None:
+        return []
+    if isinstance(val, (list, tuple, set)):
+        return [str(x) for x in val]
+    return [str(val)]
 
 def _parse_nameservers(ns) -> list[str]:
     if not ns:

@@ -1,0 +1,39 @@
+name: CI
+
+# ¿Cuándo corre este workflow?
+# - En cada push a main
+# - En cada Pull Request que apunta a main
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  tests:
+    name: Tests unitarios
+    runs-on: ubuntu-latest  # GitHub nos da una máquina Ubuntu limpia
+
+    steps:
+      # Paso 1: clonar el repositorio en la máquina de GitHub
+      - name: Clonar repositorio
+        uses: actions/checkout@v4
+
+      # Paso 2: crear el .env mínimo que necesita la app para arrancar.
+      # No usamos secrets reales porque los tests unitarios no tocan la DB.
+      # En tests de integración (futuros) sí usaríamos GitHub Secrets.
+      - name: Crear .env para CI
+        run: |
+          echo "POSTGRES_USER=ci_user"     > .env
+          echo "POSTGRES_PASSWORD=ci_pass" >> .env
+          echo "POSTGRES_DB=ci_db"         >> .env
+
+      # Paso 3: construir la imagen Docker de la API
+      - name: Construir imagen API
+        run: docker compose build api
+
+      # Paso 4: correr los tests dentro del contenedor.
+      # --no-deps → no levanta la DB ni el scanner (no los necesitamos para tests unitarios)
+      # --rm      → elimina el contenedor al terminar, no deja basura
+      - name: Correr tests
+        run: docker compose run --no-deps --rm api pytest tests/ -v
