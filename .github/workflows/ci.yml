@@ -10,30 +10,42 @@ on:
     branches: [main]
 
 jobs:
-  tests:
-    name: Tests unitarios
-    runs-on: ubuntu-latest  # GitHub nos da una máquina Ubuntu limpia
+
+  tests-python:
+    name: Tests Python
+    runs-on: ubuntu-latest
 
     steps:
-      # Paso 1: clonar el repositorio en la máquina de GitHub
       - name: Clonar repositorio
         uses: actions/checkout@v4
 
-      # Paso 2: crear el .env con valores placeholder.
-      # Los tests unitarios no tocan la DB — estos valores solo existen
-      # para que Pydantic Settings y Docker Compose no fallen al leer variables.
+      # Los tests unitarios no tocan la DB — valores placeholder para
+      # que Pydantic Settings y Docker Compose no fallen al leer variables.
       - name: Crear .env para CI
         run: |
-          echo "POSTGRES_USER=placeholder"  > .env
+          echo "POSTGRES_USER=placeholder"     > .env
           echo "POSTGRES_PASSWORD=placeholder" >> .env
-          echo "POSTGRES_DB=placeholder"    >> .env
+          echo "POSTGRES_DB=placeholder"       >> .env
 
-      # Paso 3: construir la imagen Docker de la API
       - name: Construir imagen API
         run: docker compose build api
 
-      # Paso 4: correr los tests dentro del contenedor.
-      # --no-deps → no levanta la DB ni el scanner (no los necesitamos para tests unitarios)
-      # --rm      → elimina el contenedor al terminar, no deja basura
+      # --no-deps → no levanta DB ni scanner
+      # --rm      → elimina el contenedor al terminar
       - name: Correr tests
         run: docker compose run --no-deps --rm api pytest tests/ -v
+
+
+  tests-go:
+    name: Tests Go
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Clonar repositorio
+        uses: actions/checkout@v4
+
+      # En Linux no hay problema con rutas como en Git Bash de Windows.
+      # Usamos la imagen oficial de Go para tener el compilador disponible.
+      # -short salta los tests de integración que necesitan DNS real.
+      - name: Correr tests
+        run: docker run --rm -v "${{ github.workspace }}/scanner:/app" -w /app golang:1.23 go test ./... -v -short
