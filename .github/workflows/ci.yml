@@ -1,51 +1,74 @@
 name: CI
 
-# ¿Cuándo corre este workflow?
-# - En cada push a main
-# - En cada Pull Request que apunta a main
+# ─── Cuándo se dispara este workflow ─────────────────────────────────────────
+# Cada vez que alguien hace push a main, o abre un Pull Request hacia main,
+# GitHub corre automáticamente los dos jobs definidos abajo.
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
 
+# ─── Jobs ─────────────────────────────────────────────────────────────────────
+# Un job es un conjunto de pasos que corre en una máquina virtual limpia.
+# Los dos jobs son independientes → GitHub los corre en paralelo.
+# Si cualquiera falla, el commit queda marcado con ❌ en GitHub.
 jobs:
 
+  # ── Job 1: Tests de Python ──────────────────────────────────────────────────
   tests-python:
     name: Tests Python
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest  # GitHub provee una máquina Ubuntu limpia y gratuita
 
     steps:
+
+      # Descarga el código del repositorio en la máquina virtual de GitHub.
+      # Sin este paso, la máquina está vacía y no tiene nada que ejecutar.
       - name: Clonar repositorio
         uses: actions/checkout@v4
 
-      # Los tests unitarios no tocan la DB — valores placeholder para
-      # que Pydantic Settings y Docker Compose no fallen al leer variables.
+      # El .env no se sube a GitHub (está en .gitignore) porque contiene credenciales.
+      # Acá creamos uno con valores placeholder solo para que Pydantic Settings
+      # y Docker Compose no fallen al intentar leer las variables de entorno.
+      # Los tests unitarios no tocan la DB, así que los valores no importan.
       - name: Crear .env para CI
         run: |
           echo "POSTGRES_USER=placeholder"     > .env
           echo "POSTGRES_PASSWORD=placeholder" >> .env
           echo "POSTGRES_DB=placeholder"       >> .env
 
+      # Construye la imagen Docker de la API a partir del Dockerfile en ./api.
+      # Este paso es necesario porque docker compose run va a usar esa imagen.
       - name: Construir imagen API
         run: docker compose build api
 
-      # --no-deps → no levanta DB ni scanner
-      # --rm      → elimina el contenedor al terminar
+      # Corre pytest dentro del contenedor api.
+      # Usamos docker compose run (no exec) porque ningún contenedor está corriendo aún.
+      # --no-deps → no levanta la DB ni el scanner, los tests unitarios no los necesitan.
+      # --rm      → elimina el contenedor al terminar, no deja basura.
       - name: Correr tests
         run: docker compose run --no-deps --rm api pytest tests/ -v
 
 
+  # ── Job 2: Tests de Go ──────────────────────────────────────────────────────
   tests-go:
     name: Tests Go
     runs-on: ubuntu-latest
 
     steps:
+
       - name: Clonar repositorio
         uses: actions/checkout@v4
 
-      # En Linux no hay problema con rutas como en Git Bash de Windows.
-      # Usamos la imagen oficial de Go para tener el compilador disponible.
-      # -short salta los tests de integración que necesitan DNS real.
+      # No usamos docker compose run scanner porque la imagen de producción del scanner
+      # es un Alpine con solo el binario compilado — no tiene Go instalado.
+      # En cambio, usamos docker run con la imagen oficial golang:1.23 que sí tiene
+      # el compilador y puede ejecutar go test.
+      #
+      # ${{ github.workspace }} es una variable de GitHub Actions que contiene
+      # la ruta donde se clonó el repositorio en la máquina virtual (ej: /home/runner/work/...).
+      # La montamos en /app dentro del contenedor para que go test encuentre el código.
+      #
+      # -short salta los tests de integración que hacen DNS real a internet.
       - name: Correr tests
         run: docker run --rm -v "${{ github.workspace }}/scanner:/app" -w /app golang:1.23 go test ./... -v -short
