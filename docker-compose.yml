@@ -42,6 +42,25 @@ services:
       db: # Esto significa que el escaner no intentará conectarse a la BDD hasta que el servicio de la base de datos esté listo
         condition: service_healthy # Esto hace que el escaner espere a que el healthcheck de la base de datos indique que está lista antes de iniciar
 
+  # Base de datos exclusiva para tests de integración.
+  # Es un PostgreSQL idéntico al de desarrollo, pero:
+  #   - Puerto distinto (5433 en vez de 5432) para no pisar al de desarrollo
+  #   - Sin volume → los datos se pierden al parar el contenedor (es lo que queremos)
+  #   - Credenciales hardcodeadas porque no son secretas — solo existen durante el test
+  db-test:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test_pass
+      POSTGRES_DB: mailanalyzer_test
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test_user -d mailanalyzer_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
 volumes:
   postgres_data: # Le digo a Docker que maneje este volumen
 

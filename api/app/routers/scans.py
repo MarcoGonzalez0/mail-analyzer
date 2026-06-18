@@ -1,3 +1,9 @@
+"""
+Este modulo solo enruta las request hacia el scan_service, el cual se encarga de toda la lógica de negocio.
+En este módulo no se hace nada más que recibir las request, llamar al servicio y devolver la respuesta. Esto mantiene el código limpio y separado por responsabilidades.
+El modulo health.py hace lo mismo pero para el endpoint de health check, y se puede seguir este patrón para otros endpoints en el futuro.
+"""
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db # Importo dependency para obtener la sesión de base de datos

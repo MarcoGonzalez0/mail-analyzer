@@ -35,3 +35,7 @@ COPY --from=builder /app/bin/scanner .
 EXPOSE 8080
 
 CMD ["./scanner"]
+
+# en la primera etapa se crea un binario con todo lo necesario, y en la segunda etapa solo se copia ese binario a la imagen final.
+# por lo que no se pueden correr test directamente en la imagen, ya que no tiene nada.
+# el multi-stage build de Go no es una complicación caprichosa — es la consecuencia natural de compilar. El compilador solo se necesita para construir, no para correr. Separar las etapas elimina el compilador de la imagen final. Para producción seria es la práctica estándar; para aprendizaje es conocimiento valioso aunque no imprescindible hoy.

@@ -2,7 +2,7 @@ name: CI
 
 # ─── Cuándo se dispara este workflow ─────────────────────────────────────────
 # Cada vez que alguien hace push a main, o abre un Pull Request hacia main,
-# GitHub corre automáticamente los dos jobs definidos abajo.
+# GitHub corre automáticamente los jobs definidos abajo.
 on:
   push:
     branches: [main]
@@ -10,26 +10,26 @@ on:
     branches: [main]
 
 # ─── Jobs ─────────────────────────────────────────────────────────────────────
-# Un job es un conjunto de pasos que corre en una máquina virtual limpia.
-# Los dos jobs son independientes → GitHub los corre en paralelo.
-# Si cualquiera falla, el commit queda marcado con ❌ en GitHub.
+# Los tres jobs corren en paralelo. Si cualquiera falla, el commit queda con ❌.
+#
+#   tests-python-unit        → rápido, sin DB, verifica lógica pura
+#   tests-python-integration → más lento, levanta PostgreSQL, verifica endpoints
+#   tests-go                 → verifica el handler HTTP del scanner
 jobs:
 
-  # ── Job 1: Tests de Python ──────────────────────────────────────────────────
-  tests-python:
-    name: Tests Python
-    runs-on: ubuntu-latest  # GitHub provee una máquina Ubuntu limpia y gratuita
+  # ── Job 1: Tests unitarios de Python ────────────────────────────────────────
+  # No necesitan DB ni scanner. Usan --no-deps para no levantar ningún servicio.
+  # Corren con credenciales placeholder porque Pydantic valida las variables
+  # al importar config.py, aunque la DB no se use en los tests unitarios.
+  tests-python-unit:
+    name: Tests unitarios Python
+    runs-on: ubuntu-latest
 
     steps:
-
-      # Descarga el código del repositorio en la máquina virtual de GitHub.
-      # Sin este paso, la máquina está vacía y no tiene nada que ejecutar.
       - name: Clonar repositorio
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4 # Clona el código del repositorio para que los tests puedan ejecutarse.
 
       # El .env no se sube a GitHub (está en .gitignore) porque contiene credenciales.
-      # Acá creamos uno con valores placeholder solo para que Pydantic Settings
-      # y Docker Compose no fallen al intentar leer las variables de entorno.
       # Los tests unitarios no tocan la DB, así que los valores no importan.
       - name: Crear .env para CI
         run: |
@@ -37,26 +37,65 @@ jobs:
           echo "POSTGRES_PASSWORD=placeholder" >> .env
           echo "POSTGRES_DB=placeholder"       >> .env
 
-      # Construye la imagen Docker de la API a partir del Dockerfile en ./api.
-      # Este paso es necesario porque docker compose run va a usar esa imagen.
       - name: Construir imagen API
         run: docker compose build api
 
-      # Corre pytest dentro del contenedor api.
-      # Usamos docker compose run (no exec) porque ningún contenedor está corriendo aún.
-      # --no-deps → no levanta la DB ni el scanner, los tests unitarios no los necesitan.
-      # --rm      → elimina el contenedor al terminar, no deja basura.
-      - name: Correr tests
-        run: docker compose run --no-deps --rm api pytest tests/ -v
+      # -m "not integration" → excluye los tests marcados con @pytest.mark.integration
+      # --no-deps             → no levanta DB ni scanner
+      - name: Correr tests unitarios
+        run: docker compose run --no-deps --rm api pytest tests/ -v -m "not integration"
 
 
-  # ── Job 2: Tests de Go ──────────────────────────────────────────────────────
+  # ── Job 2: Tests de integración de Python ───────────────────────────────────
+  # Necesitan PostgreSQL corriendo. Usamos el servicio db-test del docker-compose,
+  # que es una DB separada de la de desarrollo para no tocar datos reales.
+  # Los tests se conectan por la red interna de Docker (hostname "db-test").
+  tests-python-integration:
+    name: Tests integración Python
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Clonar repositorio
+        uses: actions/checkout@v4
+
+      # El .env necesita valores placeholder para que Pydantic Settings no falle
+      # al importar config.py. La DB real de tests se configura via TEST_DATABASE_URL.
+      - name: Crear .env para CI
+        run: |
+          echo "POSTGRES_USER=placeholder"     > .env
+          echo "POSTGRES_PASSWORD=placeholder" >> .env
+          echo "POSTGRES_DB=placeholder"       >> .env
+
+      - name: Construir imagen API
+        run: docker compose build api
+
+      # Levanta solo la DB de test (db-test), no la de desarrollo (db).
+      - name: Levantar la base de datos de test
+        run: docker compose up -d db-test
+
+      # Esperar a que PostgreSQL acepte conexiones antes de correr tests.
+      - name: Esperar a que PostgreSQL esté listo
+        run: |
+          echo "Esperando a que PostgreSQL de test esté listo..."
+          until docker compose exec -T db-test pg_isready -U test_user -d mailanalyzer_test; do
+            sleep 2
+          done
+
+      # TEST_DATABASE_URL apunta al servicio db-test, no al db de desarrollo.
+      # conftest.py lee esta variable para saber a qué PostgreSQL conectarse.
+      - name: Correr tests de integración
+        run: >
+          docker compose run --rm
+          -e TEST_DATABASE_URL=postgresql+asyncpg://test_user:test_pass@db-test:5432/mailanalyzer_test
+          api pytest tests/ -v -m integration
+
+
+  # ── Job 3: Tests de Go ──────────────────────────────────────────────────────
   tests-go:
     name: Tests Go
     runs-on: ubuntu-latest
 
     steps:
-
       - name: Clonar repositorio
         uses: actions/checkout@v4
 
