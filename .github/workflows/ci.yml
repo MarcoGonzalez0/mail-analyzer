@@ -40,10 +40,10 @@ jobs:
       - name: Construir imagen API
         run: docker compose build api
 
-      # -m "not integration" → excluye los tests marcados con @pytest.mark.integration
-      # --no-deps             → no levanta DB ni scanner
+      # -m "not integration and not e2e" → excluye tests que necesitan servicios externos
+      # --no-deps                       → no levanta DB ni scanner
       - name: Correr tests unitarios
-        run: docker compose run --no-deps --rm api pytest tests/ -v -m "not integration"
+        run: docker compose run --no-deps --rm api pytest tests/ -v -m "not integration and not e2e"
 
 
   # ── Job 2: Tests de integración de Python ───────────────────────────────────
