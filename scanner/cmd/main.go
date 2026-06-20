@@ -51,9 +51,18 @@ func scanHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
+// healthHandler permite que Docker (u otro orquestador) verifique que el
+// servidor está vivo y aceptando conexiones. Sin esto, la única forma de
+// saber si el scanner arrancó es revisar logs — frágil y no estándar.
+func healthHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Write([]byte(`{"status":"ok"}`))
+}
+
 // La función main es el punto de entrada del programa. Aquí se configura el servidor HTTP para escuchar en el puerto 8080 y manejar las solicitudes a la ruta "/scan" utilizando la función "scanHandler". Si el servidor encuentra un error al iniciar, se registra el error y se detiene la ejecución del programa.
 func main() {
 	http.HandleFunc("/scan", scanHandler)
+	http.HandleFunc("/health", healthHandler)
 	fmt.Println("Scanner listening on :8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }

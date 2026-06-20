@@ -111,3 +111,62 @@ jobs:
       # -short salta los tests de integración que hacen DNS real a internet.
       - name: Correr tests
         run: docker run --rm -v "${{ github.workspace }}/scanner:/app" -w /app golang:1.23 go test ./... -v -short
+
+
+  # ── Job 4: Tests end-to-end ─────────────────────────────────────────────────
+  # Flujo completo SIN mocks: Python → Go scanner (HTTP real) → DNS real → DB.
+  # Verifica el CONTRATO entre servicios — que el JSON que Go produce sea
+  # exactamente el que Python espera. Si Go cambia un campo, este job falla.
+  #
+  # A diferencia de tests-python-integration (que mockea Go), este job levanta
+  # el scanner Go real y deja que Python le haga HTTP de verdad.
+  tests-e2e:
+    name: Tests E2E (Python ↔ Go)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Clonar repositorio
+        uses: actions/checkout@v4
+
+      - name: Crear .env para CI
+        run: |
+          echo "POSTGRES_USER=placeholder"     > .env
+          echo "POSTGRES_PASSWORD=placeholder" >> .env
+          echo "POSTGRES_DB=placeholder"       >> .env
+
+      # Construimos ambas imágenes: api (Python) y scanner (Go).
+      # Los otros servicios (db, db-test) usan imagen oficial postgres:16,
+      # no necesitan build.
+      - name: Construir imágenes
+        run: docker compose build api scanner
+
+      # docker compose up -d scanner db-test levanta 3 servicios, no 2:
+      #   scanner → arranca el scanner Go
+      #   db-test → arranca PostgreSQL de test
+      #   db      → arranca también porque scanner tiene depends_on: db
+      # El -d los corre en background para que el workflow siga.
+      - name: Levantar scanner y base de datos de test
+        run: docker compose up -d scanner db-test
+
+      - name: Esperar a que PostgreSQL esté listo
+        run: |
+          echo "Esperando a que PostgreSQL de test esté listo..."
+          until docker compose exec -T db-test pg_isready -U test_user -d mailanalyzer_test; do
+            sleep 2
+          done
+
+      # Esperamos a que el healthcheck del scanner pase (GET /health → 200).
+      # Mismo patrón que PostgreSQL: Docker verifica que el servicio responde,
+      # no dependemos de parsear logs (frágil si cambia el mensaje).
+      - name: Esperar a que el scanner esté listo
+        run: |
+          echo "Esperando a que el scanner Go esté listo..."
+          until [ "$(docker inspect --format='{{.State.Health.Status}}' mail-analyzer-scanner-1 2>/dev/null)" = "healthy" ]; do
+            sleep 2
+          done
+
+      - name: Correr tests e2e
+        run: >
+          docker compose run --rm
+          -e TEST_DATABASE_URL=postgresql+asyncpg://test_user:test_pass@db-test:5432/mailanalyzer_test
+          api pytest tests/ -v -m e2e
