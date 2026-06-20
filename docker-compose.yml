@@ -25,6 +25,12 @@ services:
     depends_on:
       db: # Esto significa que la API no intentar conectarse a la BDD hasta que el servicio de la base de datos esté listo
         condition: service_healthy # Esto hace que la API espere a que el healthcheck de la base de datos indique que está lista antes de iniciar
+    healthcheck: # Usa Python (ya instalado en la imagen) en vez de curl (habría que instalarlo)
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/v1/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s # da 10s de gracia al arrancar (uvicorn + create_all toman tiempo)
     volumes:
     # Esto dice basicamente:
     # "Todo lo que está en mi carpeta api/ de Windows, hacelo visible en /app dentro del contenedor"
