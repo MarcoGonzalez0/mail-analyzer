@@ -29,6 +29,11 @@ Persiste resultados en PostgreSQL. Primera versión: solo backend.
 - Muestra cómo encaja en el flujo de datos de punta a punta
 - Si hay alternativas, compara sus tradeoffs
 - Enfoque en robustez, modularidad, buenas prácticas, modernidad
+- Si el código toca manejo de errores en producción (qué pasa cuando algo
+  falla de forma inesperada: DB caída, timeout, excepción no prevista),
+  menciona explícitamente que se enmarca en "defensive programming" /
+  "fail-safe defaults" — la idea de que un sistema nunca debe filtrar
+  detalles internos (stack traces, rutas, nombres de librerías) al cliente
 
 ### Al mostrar código
 - Si es mucho código, entrega el código por partes, explicando qué vas haciendo

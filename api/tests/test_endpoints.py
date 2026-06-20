@@ -203,4 +203,4 @@ class TestHealth:
         assert response.status_code == 200
         assert response.json()["status"] == "degraded"
         assert response.json()["db"] == "error"
-        assert response.json()["db"] == "error"
+        
