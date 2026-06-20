@@ -44,12 +44,30 @@ app.include_router(scans.router, prefix="/v1")
 app.include_router(health.router, prefix="/v1")
 
 
-# Captura cualquier excepción no manejada por los endpoints (ej. DB caída a mitad
-# de un request). Sin esto, FastAPI devuelve un 500 en texto plano sin loguear nada.
-# Con esto: se loguea con detalle (para vos) y el cliente recibe JSON consistente.
+# ── GLOBAL EXCEPTION HANDLER (defensive programming / fail-safe defaults) ────
+#
+# Última línea de defensa: atrapa cualquier excepción que escape de un endpoint
+# sin ser manejada (ej. DB muere a mitad de un query, bug inesperado).
+#
+# NO interviene cuando el error ya está controlado:
+#   - Pydantic rechaza input inválido        → 422 (lo maneja FastAPI)
+#   - raise HTTPException(404)               → 404 (lo maneja tu código)
+#   - try/except en scan_service             → 200 con status="failed"
+#
+# Solo actúa cuando NADA más atrapó la excepción.
+#
+# @app.exception_handler(Exception) registra el handler en la app (no en un router)
+# porque debe cubrir TODOS los endpoints. Exception es la clase base → atrapa todo.
+# Se podría registrar handlers para tipos específicos (ValueError, SQLAlchemyError).
+#
+# Vive en main.py porque es donde se crea la instancia de FastAPI — el handler
+# se registra directamente en `app`, la capa más externa antes del cliente.
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
+    # exc_info=exc incluye el stack trace completo en los logs (para el desarrollador)
     logger.error(f"Error no manejado en {request.url.path}", exc_info=exc)
+    # Al cliente se le devuelve un JSON genérico sin detalles internos
+    # (sin stack traces, rutas de archivos, ni nombres de librerías)
     return JSONResponse(
         status_code=500,
         content={"detail": "Error interno del servidor"},

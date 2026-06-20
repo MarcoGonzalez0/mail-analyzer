@@ -28,23 +28,18 @@ Persiste resultados en PostgreSQL. Primera versión: solo backend.
 - Explica el concepto y patrón que aplica
 - Muestra cómo encaja en el flujo de datos de punta a punta
 - Si hay alternativas, compara sus tradeoffs
-- Enfoque en robustez, modularidad, buenas prácticas, modernidad
-- Si el código toca manejo de errores en producción (qué pasa cuando algo
-  falla de forma inesperada: DB caída, timeout, excepción no prevista),
-  menciona explícitamente que se enmarca en "defensive programming" /
-  "fail-safe defaults" — la idea de que un sistema nunca debe filtrar
-  detalles internos (stack traces, rutas, nombres de librerías) al cliente
+- Enfoque en robustez, modularidad, buenas prácticas, modernidad, defensive-programming
 
 ### Al mostrar código
 - Si es mucho código, entrega el código por partes, explicando qué vas haciendo
 - Comenta el "por qué", no el "qué"
 - Relaciona cada decisión con la arquitectura general del proyecto
 - Si aplica, dame consejos de mejora de codigo y explica el porqué
-- Escribe comentarios correspondientes al escribir código o explicarme conceptos
+- Escribe comentarios correspondientes en los archivos al escribir código o explicarme conceptos
 
 ### Con bugs
 - Explica la causa raíz antes de corregir
 
 ### Al cerrar cada tarea
 - Takeaway: concepto clave aprendido
-- Sugerencia: qué explorar a continuación
+- Sugerencia: qué explorar a continuación. Cada vez que introduzcas conceptos nuevos menciona en que área/aspectos se categorizan
