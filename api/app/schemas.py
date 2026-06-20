@@ -32,3 +32,10 @@ class ScanResponse(BaseModel):
 class ScanListResponse(BaseModel):
     total: int
     scans: list[ScanResponse]
+
+
+# Respuesta del GET /health — refleja el estado de la app y sus dependencias
+class HealthResponse(BaseModel):
+    status: str   # "ok" o "degraded"
+    version: str
+    db: str       # "ok" o "error"

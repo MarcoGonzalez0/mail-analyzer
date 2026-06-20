@@ -35,6 +35,7 @@ Persiste resultados en PostgreSQL. Primera versión: solo backend.
 - Comenta el "por qué", no el "qué"
 - Relaciona cada decisión con la arquitectura general del proyecto
 - Si aplica, dame consejos de mejora de codigo y explica el porqué
+- Escribe comentarios correspondientes al escribir código o explicarme conceptos
 
 ### Con bugs
 - Explica la causa raíz antes de corregir
@@ -42,4 +43,3 @@ Persiste resultados en PostgreSQL. Primera versión: solo backend.
 ### Al cerrar cada tarea
 - Takeaway: concepto clave aprendido
 - Sugerencia: qué explorar a continuación
-- Si me explicaste una parte del código o conceptos relacionados, escribe comentarios correspondientes

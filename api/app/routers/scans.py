@@ -4,6 +4,7 @@ En este módulo no se hace nada más que recibir las request, llamar al servicio
 El modulo health.py hace lo mismo pero para el endpoint de health check, y se puede seguir este patrón para otros endpoints en el futuro.
 """
 
+import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db # Importo dependency para obtener la sesión de base de datos
@@ -27,7 +28,7 @@ async def list_scans(db: AsyncSession = Depends(get_db)):
 
 # /v1/scans/{scan_id} - GET: Obtiene los detalles de un escaneo específico por su ID
 @router.get("/scans/{scan_id}", response_model=ScanResponse)
-async def get_scan(scan_id: str, db: AsyncSession = Depends(get_db)):
+async def get_scan(scan_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
     scan = await scan_service.get_scan(db, scan_id)
     if not scan:
         raise HTTPException(status_code=404, detail="Scan not found")

@@ -163,3 +163,44 @@ class TestObtenerScan:
     async def test_id_inexistente_devuelve_404(self, client):
         response = await client.get("/v1/scans/00000000-0000-0000-0000-000000000000")
         assert response.status_code == 404
+
+    async def test_id_no_uuid_devuelve_422(self, client):
+        """Un entero como "13" no es UUID válido — FastAPI debe rechazarlo antes del servicio."""
+        response = await client.get("/v1/scans/13")
+        assert response.status_code == 422
+
+
+# ─── GET /health ──────────────────────────────────────────────────────────────
+
+@pytest.mark.integration
+class TestHealth:
+
+    async def test_health_con_db_ok(self, client):
+        """Con DB disponible, health devuelve status ok."""
+        response = await client.get("/v1/health")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "ok"
+        assert data["db"] == "ok"
+        assert "version" in data
+
+    async def test_health_con_db_caída(self, client):
+        """Si la DB falla, health devuelve degraded (no 500) — la app sigue respondiendo."""
+        from app.database import get_db
+        from app.main import app
+        # Sobrescribimos la dependencia get_db para simular una falla de DB (ej. conexión rechazada).
+
+        async def _db_rota():
+            mock_session = AsyncMock()
+            mock_session.execute.side_effect = Exception("connection refused")
+            yield mock_session
+
+        app.dependency_overrides[get_db] = _db_rota
+
+        # Al hacer esto, la dependencia get_db ahora usará _db_rota, que simula una falla de DB. Esto nos permite probar cómo responde el endpoint de health cuando la DB no está disponible.
+        response = await client.get("/v1/health")
+
+        assert response.status_code == 200
+        assert response.json()["status"] == "degraded"
+        assert response.json()["db"] == "error"
+        assert response.json()["db"] == "error"
