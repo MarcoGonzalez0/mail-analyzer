@@ -13,9 +13,20 @@ API REST que recibe un email y devuelve un análisis de seguridad de su dominio:
 
 ## Levantar el proyecto
 
+### Desarrollo
+
 ```bash
 cp .env.example .env  # completar credenciales
 docker compose up --build
+```
+
+### Producción
+
+```bash
+export POSTGRES_USER=admin
+export POSTGRES_PASSWORD=una_password_segura
+export POSTGRES_DB=mailanalyzer
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d
 ```
 
 API disponible en `http://localhost:8000` — documentación en `http://localhost:8000/docs`

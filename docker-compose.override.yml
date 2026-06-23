@@ -1,0 +1,25 @@
+# Override de DESARROLLO — Docker Compose lo lee automáticamente.
+# Agrega bind mount (hot-reload) y la base de datos de tests.
+
+services:
+  api:
+    volumes:
+      - ./api:/app # Bind mount: cambios locales se reflejan al instante en el contenedor
+
+  db:
+    ports:
+      - "5432:5432" # Expone el puerto para conectarse desde herramientas locales (DBeaver, pgAdmin, etc.)
+
+  db-test:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test_pass
+      POSTGRES_DB: mailanalyzer_test
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test_user -d mailanalyzer_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 5

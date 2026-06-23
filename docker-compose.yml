@@ -1,92 +1,53 @@
+# Configuración base — compartida entre desarrollo y producción.
+# Desarrollo agrega sus propias cosas via docker-compose.override.yml (se lee automáticamente).
+# Producción usa: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
 services:
-  db: # Base de datos
-    image: postgres:16 # Imagen oficial de PostgreSQL
-    environment: # Variables de entorno para configurar PostgreSQL
+  db:
+    image: postgres:16
+    environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
-    ports:
-      - "5432:5432" # Puerto de PC - Puerto del contenedor
     volumes:
-      - postgres_data:/var/lib/postgresql/data # Esto es un 'volume' para persistir datos, la ruta es interna de PostgreSQL en el contenedor
-      # este volume vive en mi pc
-    healthcheck: # Esto es para que Docker pueda verificar si la base de datos está lista para aceptar conexiones
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 5
 
-  api: # API de FastAPI (Python)
-    build: ./api # No es imagen oficial, se construye a partir del Dockerfile en ./api
+  api:
+    build: ./api
     ports:
       - "8000:8000"
-    environment: # Variables de entorno para configurar la conexión a la base de datos
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB} 
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
     depends_on:
-      db: # Esto significa que la API no intentar conectarse a la BDD hasta que el servicio de la base de datos esté listo
-        condition: service_healthy # Esto hace que la API espere a que el healthcheck de la base de datos indique que está lista antes de iniciar
-    healthcheck: # Usa Python (ya instalado en la imagen) en vez de curl (habría que instalarlo)
+      db:
+        condition: service_healthy
+    healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/v1/health')"]
       interval: 10s
       timeout: 5s
       retries: 3
-      start_period: 10s # da 10s de gracia al arrancar (uvicorn + create_all toman tiempo)
-    volumes:
-    # Esto dice basicamente:
-    # "Todo lo que está en mi carpeta api/ de Windows, hacelo visible en /app dentro del contenedor"
-      - ./api:/app # Esto es un 'bind mount' para que los cambios en el código de la API se reflejen inmediatamente en el contenedor (útil para desarrollo)
-      # esto sobreescribe lo que COPY . . puso en el Dockerfile, pero es útil para desarrollo porque permite que los cambios en el código se reflejen inmediatamente sin tener que reconstruir la imagen cada vez
-      # En producción no hay bind mount, entonces COPY . . es lo que manda y el código queda fijo dentro de la imagen.
+      start_period: 10s
 
-  scanner: # Escaner de vulnerabilidades (Go)
-    build: ./scanner # No es imagen oficial, se construye a partir del Dockerfile en ./scanner
+  scanner:
+    build: ./scanner
     ports:
       - "8080:8080"
     dns:
       - 8.8.8.8
       - 1.1.1.1
     depends_on:
-      db: # Esto significa que el escaner no intentará conectarse a la BDD hasta que el servicio de la base de datos esté listo
-        condition: service_healthy # Esto hace que el escaner espere a que el healthcheck de la base de datos indique que está lista antes de iniciar
-    healthcheck: # wget viene incluido en Alpine (via BusyBox)
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"] # Esto hace una petición HTTP al endpoint /health del escaner para verificar si está listo y se guarda en el log de salud del contenedor
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
       interval: 5s
       timeout: 5s
       retries: 3
 
-  # Base de datos exclusiva para tests de integración.
-  # Es un PostgreSQL idéntico al de desarrollo, pero:
-  #   - Puerto distinto (5433 en vez de 5432) para no pisar al de desarrollo
-  #   - Sin volume → los datos se pierden al parar el contenedor (es lo que queremos)
-  #   - Credenciales hardcodeadas porque no son secretas — solo existen durante el test
-  db-test:
-    image: postgres:16
-    environment:
-      POSTGRES_USER: test_user
-      POSTGRES_PASSWORD: test_pass
-      POSTGRES_DB: mailanalyzer_test
-    ports:
-      - "5433:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U test_user -d mailanalyzer_test"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
 volumes:
-  postgres_data: # Le digo a Docker que maneje este volumen
-
-
-# COMENTARIOS PARA CLARIDAD
-
-# Cada contenedor tiene su propio /app aislado. No comparten el mismo /app:
-# Un container no sabe lo que hay en el otro, no pueden acceder a los archivos del otro. Esto es parte de la magia de Docker, cada contenedor es como una mini máquina virtual con su propio sistema de archivos, procesos, etc.
-
-# Contenedor API          Contenedor Scanner
-# ──────────────          ──────────────────
-# /app/                   /app/
-# ├── app/                └── bin/
-# │   ├── main.py             scanner (binario)
-# │   └── ...
-# ├── tests/
-# └── requirements.txt
+  postgres_data:
