@@ -9,6 +9,7 @@ API REST que recibe un email y devuelve un análisis de seguridad de su dominio:
 | API | Python + FastAPI (async) |
 | Escaneo DNS | Go (microservicio) |
 | Base de datos | PostgreSQL + JSONB |
+| Reverse proxy | Nginx (producción) |
 | Infraestructura | Docker + GitHub Actions |
 
 ## Levantar el proyecto
@@ -29,7 +30,8 @@ export POSTGRES_DB=mailanalyzer
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d
 ```
 
-API disponible en `http://localhost:8000` — documentación en `http://localhost:8000/docs`
+- **Desarrollo**: API en `http://localhost:8000` — docs en `http://localhost:8000/docs`
+- **Producción**: API en `http://localhost/v1/` (detrás de Nginx)
 
 ## Endpoints
 
