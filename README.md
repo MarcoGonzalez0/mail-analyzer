@@ -24,10 +24,13 @@ docker compose up --build
 ### Producción
 
 ```bash
-export POSTGRES_USER=admin
-export POSTGRES_PASSWORD=una_password_segura
-export POSTGRES_DB=mailanalyzer
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d
+# Crear archivo de credenciales (una sola vez)
+sudo mkdir -p /etc/mail-analyzer
+sudo nano /etc/mail-analyzer/.env.prod  # POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB
+sudo chmod 600 /etc/mail-analyzer/.env.prod
+
+# Levantar
+docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file /etc/mail-analyzer/.env.prod up --build -d
 ```
 
 - **Desarrollo**: API en `http://localhost:8000` — docs en `http://localhost:8000/docs`
@@ -39,7 +42,7 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d
 POST /v1/scans          # analizar un dominio a partir de un email
 GET  /v1/scans          # listar todos los análisis
 GET  /v1/scans/{id}     # obtener un análisis por ID
-GET  /health            # health check
+GET  /v1/health         # health check
 ```
 
 ### Ejemplo

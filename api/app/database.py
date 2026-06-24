@@ -3,6 +3,7 @@ from sqlalchemy.orm import DeclarativeBase, sessionmaker # para crear sesiones y
 from app.config import settings # buscar URL de la database
 
 # Crear el motor de la base de datos asíncrona utilizando la URL proporcionada en la configuración
+# database_url y environment se leen desde el entorno, y se utiliza echo=True en desarrollo para mostrar las consultas SQL en la consola
 engine = create_async_engine(settings.database_url, 
                              echo=settings.environment == "development")
 
